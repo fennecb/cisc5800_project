@@ -67,6 +67,16 @@ class ParamGrids(Enum):
         'classifier__algorithm': ['SAMME', 'SAMME.R'],
         'smote__k_neighbors': [3, 5, 7]
     }
+
+    XGBOOST_BINARY = {
+        'classifier__n_estimators': [50, 100, 200],
+        'classifier__learning_rate': [0.01, 0.05, 0.1, 0.2],
+        'classifier__max_depth': [3, 5, 7],
+        'classifier__min_child_weight': [1, 3, 5],
+        'classifier__subsample': [0.8, 0.9, 1.0],
+        'classifier__colsample_bytree': [0.8, 0.9, 1.0],
+        'smote__k_neighbors': [3, 5, 7]
+    }
     
     # ==================== MULTI-CLASS CLASSIFICATION GRIDS ====================
     RANDOM_FOREST_MULTICLASS = {

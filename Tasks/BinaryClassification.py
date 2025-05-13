@@ -1,9 +1,12 @@
 from imblearn.over_sampling import SMOTE
+from imblearn.under_sampling import RandomUnderSampler
 from imblearn.pipeline import Pipeline as ImbPipeline
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, VotingClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     classification_report, confusion_matrix, roc_auc_score, 
     accuracy_score, precision_recall_curve, average_precision_score,
@@ -11,97 +14,309 @@ from sklearn.metrics import (
     make_scorer, roc_curve
 )
 from sklearn.model_selection import GridSearchCV
+from sklearn.svm import SVC
+from xgboost import XGBClassifier
 
 from BaseStudentPerformance import BaseStudentPerformance
 from Enums.ParamGrids import ParamGrids
 
+import warnings
+warnings.filterwarnings("ignore")
+from sklearn.exceptions import ConvergenceWarning
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
+
 class BinaryClassification(BaseStudentPerformance):
-    def __init__(self, threshold=10):
+    def __init__(self, threshold=10, imbalance_method='smote', 
+                class_weight_ratio=10.0, ensemble_models=None,
+                ensemble_voting='soft', ensemble_threshold=0.4):
         super().__init__()
         self.transform_target_binary(threshold)
         self.threshold = threshold
+        self.imbalance_method = imbalance_method
+        self.class_weight_ratio = class_weight_ratio
+        self.ensemble_models = ensemble_models or ['random_forest', 'logistic_regression', 'xgboost']
+        self.ensemble_voting = ensemble_voting
+        self.ensemble_threshold = ensemble_threshold
     
     def create_pipeline(self, classifier_name):
-        """Create pipeline with SMOTE for binary classification"""
+        """Create pipeline with chosen imbalance correction method"""
         classifier = self.get_classifier(classifier_name)
         
-        if hasattr(classifier, 'class_weight'):
+        # Apply custom class weights if supported
+        if hasattr(classifier, 'class_weight') and self.imbalance_method == 'class_weight':
+            weight_dict = {0: self.class_weight_ratio, 1: 1.0}
+            classifier.set_params(class_weight=weight_dict)
+        elif hasattr(classifier, 'class_weight'):
             classifier.set_params(class_weight='balanced')
         
-        # Create pipeline with SMOTE
+        if self.imbalance_method == 'smote':
+            pipeline = ImbPipeline([
+                ('binary_encode', self.binary_transformer),
+                ('column_transform', self.column_transformer),
+                ('smote', SMOTE(random_state=42)),
+                ('classifier', classifier)
+            ])
+        elif self.imbalance_method == 'class_weight':
+            pipeline = ImbPipeline([
+                ('binary_encode', self.binary_transformer),
+                ('column_transform', self.column_transformer),
+                ('classifier', classifier)
+            ])
+        elif self.imbalance_method == 'undersampling':
+            pipeline = ImbPipeline([
+                ('binary_encode', self.binary_transformer),
+                ('column_transform', self.column_transformer),
+                ('undersampler', RandomUnderSampler(random_state=42)),
+                ('classifier', classifier)
+            ])
+        else:
+            # Default to just preprocessing for ensemble (handled separately)
+            pipeline = ImbPipeline([
+                ('binary_encode', self.binary_transformer),
+                ('column_transform', self.column_transformer),
+                ('classifier', classifier)
+            ])
+        
+        return pipeline
+    
+    def get_classifier(self, classifier_name):
+        """Get classifier instance based on name, including XGBoost"""
+        from sklearn.ensemble import ExtraTreesClassifier, AdaBoostClassifier
+        from sklearn.naive_bayes import GaussianNB
+        from sklearn.neighbors import KNeighborsClassifier
+        
+        classifiers = {
+            'random_forest': RandomForestClassifier(random_state=42),
+            'logistic_regression': LogisticRegression(random_state=42, tol=1e-3),
+            'svm': SVC(random_state=42, probability=True),
+            'gradient_boosting': GradientBoostingClassifier(random_state=42),
+            'extra_trees': ExtraTreesClassifier(random_state=42),
+            'naive_bayes': GaussianNB(),
+            'knn': KNeighborsClassifier(),
+            'ada_boost': AdaBoostClassifier(random_state=42),
+            'xgboost': XGBClassifier(random_state=42, eval_metric='logloss')
+        }
+        return classifiers.get(classifier_name.lower())
+    
+    def create_ensemble_pipeline(self):
+        """Create an ensemble of models with custom weighting for imbalance correction"""
+        estimators = []
+        
+        for i, model_name in enumerate(self.ensemble_models):
+            model = self.get_classifier(model_name)
+            
+            # Apply custom class weighting to each model that supports it
+            if hasattr(model, 'class_weight'):
+                weight_dict = {0: self.class_weight_ratio, 1: 1.0}
+                model.set_params(class_weight=weight_dict)
+            
+            # Name each estimator uniquely
+            estimators.append((f"{model_name}_{i}", model))
+        
+        # Create a voting classifier
+        voting = self.ensemble_voting
+        ensemble = VotingClassifier(estimators=estimators, voting=voting)
+        
+        # Create the full pipeline
         pipeline = ImbPipeline([
             ('binary_encode', self.binary_transformer),
             ('column_transform', self.column_transformer),
-            ('smote', SMOTE(random_state=42)),
-            ('classifier', classifier)
+            ('ensemble', ensemble)
         ])
         
         return pipeline
     
     def perform_grid_search(self, X_train, y_train, classifier_name, param_grid=None, cv=5, n_jobs=-1, optimize_for='recall_failing'):
         """Perform grid search optimized for identifying failing students"""
-        # Get the parameter grid
-        if param_grid is None:
-            param_grid_enum = getattr(ParamGrids, f"{classifier_name.upper()}_BINARY", None)
-            if param_grid_enum is None:
-                # Fallback to old naming convention
-                param_grid_enum = getattr(ParamGrids, classifier_name.upper(), None)
-            if param_grid_enum is None:
-                raise ValueError(f"No parameter grid found for {classifier_name}")
-            param_grid = param_grid_enum.value
-        
-        # Create pipeline
-        pipeline = self.create_pipeline(classifier_name)
-        
-        # Define custom scorer for recall of failing students (class 0)
-        failing_recall_scorer = make_scorer(recall_score, pos_label=0)
-        
-        # Use multiple scoring metrics
-        scoring = {
-            'precision': make_scorer(precision_score, average='weighted'),
-            'recall': make_scorer(recall_score, average='weighted'),
-            'f1': make_scorer(f1_score, average='weighted'),
-            'roc_auc': 'roc_auc',
-            'recall_failing': failing_recall_scorer,  # Key metric for your use case
-            'precision_failing': make_scorer(precision_score, pos_label=0),
-            'f1_failing': make_scorer(f1_score, pos_label=0),
-        }
-        
-        # Choose what to optimize for
-        refit_metric = optimize_for if optimize_for in scoring else 'recall_failing'
-        
-        grid_search = GridSearchCV(
-            pipeline,
-            param_grid,
-            cv=cv,
-            scoring=scoring,
-            refit=refit_metric,  # Optimize for recall of failing students
-            n_jobs=n_jobs,
-            verbose=1
-        )
-        
-        # Fit the grid search
-        grid_search.fit(X_train, y_train)
-        
-        # Store results
-        self.grid_search_results = {
-            'classifier': classifier_name,
-            'best_params': grid_search.best_params_,
-            'best_scores': {metric: grid_search.cv_results_[f'mean_test_{metric}'][grid_search.best_index_] 
-                        for metric in scoring.keys()},
-            'cv_results': grid_search.cv_results_,
-            'best_model': grid_search.best_estimator_,
-            'optimized_for': refit_metric
-        }
-        
-        # Store fitted pipeline for feature names
-        self.fitted_pipeline = grid_search.best_estimator_
-        
-        # Print optimization target
-        print(f"Model optimized for: {refit_metric}")
-        print(f"Recall for failing students: {self.grid_search_results['best_scores']['recall_failing']:.3f}")
-        
-        return grid_search
+        if self.imbalance_method == 'ensemble':
+            # For ensemble, train each model separately with optimal params
+            self.fitted_pipelines = {}
+            best_individual_scores = {}
+            
+            for model_name in self.ensemble_models:
+                print(f"\nTraining {model_name} for ensemble...")
+                
+                # Get param grid for this model
+                if param_grid is None:
+                    model_param_grid_enum = getattr(ParamGrids, f"{model_name.upper()}_BINARY", None)
+                    print(getattr(ParamGrids, f"{model_name.upper()}_BINARY", None))
+                    print(model_param_grid_enum.value)
+                    if model_param_grid_enum is None:
+                        model_param_grid_enum = getattr(ParamGrids, model_name.upper(), None)
+                    if model_param_grid_enum is None:
+                        print(f"No parameter grid found for {model_name}, using default parameters")
+                        model_param_grid = {}
+                    else:
+                        model_param_grid = model_param_grid_enum.value
+                        if self.imbalance_method != 'smote':
+                            # Remove any parameters related to SMOTE
+                            model_param_grid = {k: v for k, v in model_param_grid.items() 
+                                                if not k.startswith('smote__')}
+                        
+                        # Add custom class weight options to parameter grid
+                        if 'classifier__class_weight' in model_param_grid:
+                            # Define various class weight ratios to try
+                            class_weight_options = [
+                                {0: 5, 1: 1},
+                                {0: 10, 1: 1},
+                                {0: 20, 1: 1},
+                                {0: 50, 1: 1},
+                                'balanced'
+                            ]
+                            model_param_grid['classifier__class_weight'] = class_weight_options
+                
+                # Create and optimize individual pipeline
+                pipeline = self.create_pipeline(model_name)
+                
+                # Define scoring metrics focused on minority class recall
+                failing_recall_scorer = make_scorer(recall_score, pos_label=0, zero_division=0)
+                
+                scoring = {
+                    'precision': make_scorer(precision_score, average='weighted', zero_division=0),
+                    'recall': make_scorer(recall_score, average='weighted', zero_division=0),
+                    'f1': make_scorer(f1_score, average='weighted', zero_division=0),
+                    'roc_auc': 'roc_auc',
+                    'recall_failing': failing_recall_scorer,
+                    'precision_failing': make_scorer(precision_score, pos_label=0, zero_division=0),
+                    'f1_failing': make_scorer(f1_score, pos_label=0, zero_division=0),
+                }
+                
+                refit_metric = optimize_for if optimize_for in scoring else 'recall_failing'
+                print(f'Param grid for {model_name.upper()}')
+                print(model_param_grid)
+                grid_search = GridSearchCV(
+                    pipeline,
+                    model_param_grid,
+                    cv=cv,
+                    scoring=scoring,
+                    refit=refit_metric,
+                    n_jobs=n_jobs,
+                    verbose=1
+                )
+                
+                grid_search.fit(X_train, y_train)
+                
+                # Store the best model
+                self.fitted_pipelines[model_name] = grid_search.best_estimator_
+                best_individual_scores[model_name] = {
+                    'params': grid_search.best_params_,
+                    'recall_failing': grid_search.cv_results_[f'mean_test_recall_failing'][grid_search.best_index_],
+                    'precision_failing': grid_search.cv_results_[f'mean_test_precision_failing'][grid_search.best_index_],
+                    'f1_failing': grid_search.cv_results_[f'mean_test_f1_failing'][grid_search.best_index_],
+                }
+                
+                print(f"{model_name} best score ({refit_metric}): {best_individual_scores[model_name][refit_metric]:.3f}")
+            
+            # Now create the ensemble with the best models
+            estimators = []
+            for model_name, pipeline in self.fitted_pipelines.items():
+                # Extract just the classifier part
+                classifier = pipeline.named_steps['classifier']
+                estimators.append((model_name, classifier))
+            
+            # Create the voting classifier
+            voting = self.ensemble_voting
+            ensemble = VotingClassifier(estimators=estimators, voting=voting)
+            
+            # Create a final pipeline with preprocessing
+            self.ensemble_pipeline = ImbPipeline([
+                ('binary_encode', self.binary_transformer),
+                ('column_transform', self.column_transformer),
+                ('ensemble', ensemble)
+            ])
+            
+            # Fit the ensemble pipeline
+            self.ensemble_pipeline.fit(X_train, y_train)
+            
+            # Store as the main fitted pipeline
+            self.fitted_pipeline = self.ensemble_pipeline
+            
+            # Create a summary of the ensemble
+            self.grid_search_results = {
+                'classifier': 'ensemble',
+                'best_params': {model: info['params'] for model, info in best_individual_scores.items()},
+                'best_scores': {
+                    'individual_models': best_individual_scores
+                },
+                'best_model': self.ensemble_pipeline,
+                'optimized_for': refit_metric
+            }
+            
+            print(f"Ensemble model created with {len(estimators)} models")
+            print(f"Voting method: {self.ensemble_voting}")
+            print(f"Prediction threshold: {self.ensemble_threshold}" if self.ensemble_voting == 'soft' else "")
+            
+            return self.ensemble_pipeline
+        else:
+            # Regular grid search for wanted algorithm
+            if param_grid is None:
+                param_grid_enum = getattr(ParamGrids, f"{classifier_name.upper()}_BINARY", None)
+                if param_grid_enum is None:
+                    param_grid_enum = getattr(ParamGrids, classifier_name.upper(), None)
+                if param_grid_enum is None:
+                    raise ValueError(f"No parameter grid found for {classifier_name}")
+                param_grid = param_grid_enum.value
+
+                if self.imbalance_method != 'smote':
+                    param_grid = {k: v for k, v in param_grid.items() 
+                                                if not k.startswith('smote__')}
+                
+                # Add custom class weights to parameter grid for class_weight method
+                if self.imbalance_method == 'class_weight' and 'classifier__class_weight' in param_grid:
+                    # Define various class weight ratios to try
+                    class_weight_options = [
+                        {0: 5, 1: 1},
+                        {0: 10, 1: 1},
+                        {0: 20, 1: 1},
+                        {0: 50, 1: 1},
+                        'balanced'
+                    ]
+                    param_grid['classifier__class_weight'] = class_weight_options
+
+            pipeline = self.create_pipeline(classifier_name)
+
+            failing_recall_scorer = make_scorer(recall_score, pos_label=0, zero_division=0)
+
+            scoring = {
+                'precision': make_scorer(precision_score, average='weighted', zero_division=0),
+                'recall': make_scorer(recall_score, average='weighted', zero_division=0),
+                'f1': make_scorer(f1_score, average='weighted', zero_division=0),
+                'roc_auc': 'roc_auc',
+                'recall_failing': failing_recall_scorer,
+                'precision_failing': make_scorer(precision_score, pos_label=0, zero_division=0),
+                'f1_failing': make_scorer(f1_score, pos_label=0, zero_division=0),
+            }
+
+            refit_metric = optimize_for if optimize_for in scoring else 'recall_failing'
+            
+            grid_search = GridSearchCV(
+                pipeline,
+                param_grid,
+                cv=cv,
+                scoring=scoring,
+                refit=refit_metric,
+                n_jobs=n_jobs,
+                verbose=1
+            )
+
+            grid_search.fit(X_train, y_train)
+
+            self.grid_search_results = {
+                'classifier': classifier_name,
+                'best_params': grid_search.best_params_,
+                'best_scores': {metric: grid_search.cv_results_[f'mean_test_{metric}'][grid_search.best_index_] 
+                            for metric in scoring.keys()},
+                'cv_results': grid_search.cv_results_,
+                'best_model': grid_search.best_estimator_,
+                'optimized_for': refit_metric
+            }
+
+            self.fitted_pipeline = grid_search.best_estimator_
+
+            print(f"Model optimized for: {refit_metric}")
+            print(f"Recall for failing students: {self.grid_search_results['best_scores']['recall_failing']:.3f}")
+            
+            return grid_search
     
     def evaluate_model(self, X_test, y_test, grid_search=None):
         """Evaluate the model with metrics suitable for imbalanced data"""
@@ -110,25 +325,30 @@ class BinaryClassification(BaseStudentPerformance):
             model = self.grid_search_results['best_model']
         else:
             model = grid_search.best_estimator_
-        
-        # Make predictions
-        y_pred = model.predict(X_test)
+
         y_pred_proba = model.predict_proba(X_test)
         
-        # Calculate comprehensive metrics
+        # For ensemble with soft voting, apply custom threshold
+        if self.imbalance_method == 'ensemble' and self.ensemble_voting == 'soft':
+            # Lower threshold to favor failing class prediction (class 0)
+            y_pred = (y_pred_proba[:, 1] >= self.ensemble_threshold).astype(int)
+        else:
+            # Use standard prediction
+            y_pred = model.predict(X_test)
+
         metrics = {
             'accuracy': accuracy_score(y_test, y_pred),
             'balanced_accuracy': balanced_accuracy_score(y_test, y_pred),
             'f1_score': f1_score(y_test, y_pred, average='weighted'),
-            'precision': precision_score(y_test, y_pred, average='weighted'),
-            'recall': recall_score(y_test, y_pred, average='weighted'),
+            'precision': precision_score(y_test, y_pred, average='weighted', zero_division=0),
+            'recall': recall_score(y_test, y_pred, average='weighted', zero_division=0),
             'confusion_matrix': confusion_matrix(y_test, y_pred),
             'classification_report': classification_report(y_test, y_pred),
             'roc_auc': roc_auc_score(y_test, y_pred_proba[:, 1]),
             'average_precision': average_precision_score(y_test, y_pred_proba[:, 1]),
             'predictions': y_pred,
             'prediction_probabilities': y_pred_proba,
-            'y_test': y_test  # Store for plotting
+            'y_test': y_test
         }
         
         # For minority class
@@ -140,84 +360,247 @@ class BinaryClassification(BaseStudentPerformance):
         self.evaluation_results = metrics
         return metrics
     
-    def plot_results(self, figsize=(15, 10)):
-        """Enhanced plotting for imbalanced binary classification"""
-        fig, axes = plt.subplots(3, 2, figsize=figsize)
-        
+    # Preserve all existing methods
+    def plot_results(self, X_test=None):
+        """
+        Plotting for imbalanced binary classification with separate high-resolution files.
+        Each plot is saved individually.
+        """
         # 1. Confusion Matrix with percentages
+        fig_cm = plt.figure(figsize=(10, 8))
         cm = self.evaluation_results['confusion_matrix']
         cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
         
-        sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues', ax=axes[0, 0])
-        axes[0, 0].set_title('Normalized Confusion Matrix')
-        axes[0, 0].set_xlabel('Predicted')
-        axes[0, 0].set_ylabel('Actual')
+        sns.heatmap(cm_normalized, annot=True, fmt='.2%', cmap='Blues')
+        plt.title('Normalized Confusion Matrix', fontsize=14)
+        plt.xlabel('Predicted', fontsize=12)
+        plt.ylabel('Actual', fontsize=12)
+        plt.tight_layout()
+        self.save_plot(fig_cm, 'confusion_matrix.png')
+        plt.close(fig_cm)
         
-        # 2. Precision-Recall Curve
+        # Add special plot for ensemble model that shows per-model contributions
+        if self.imbalance_method == 'ensemble' and hasattr(self, 'fitted_pipelines'):
+            # Plot performance comparison of individual models vs ensemble
+            fig_models = plt.figure(figsize=(12, 8))
+            model_names = list(self.fitted_pipelines.keys()) + ['Ensemble']
+            
+            # Get predictions from individual models
+            y_test = self.evaluation_results['y_test']
+            minority_recalls = []
+            minority_precisions = []
+            minority_f1s = []
+            
+            for model_name, pipeline in self.fitted_pipelines.items():
+                model_preds = pipeline.predict(X_test)
+                minority_recall = recall_score(y_test, model_preds, pos_label=0)
+                minority_precision = precision_score(y_test, model_preds, pos_label=0, zero_division=0)
+                minority_f1 = f1_score(y_test, model_preds, pos_label=0, zero_division=0)
+                
+                minority_recalls.append(minority_recall)
+                minority_precisions.append(minority_precision)
+                minority_f1s.append(minority_f1)
+            
+            # Add ensemble scores
+            minority_recalls.append(self.evaluation_results['minority_class_recall'])
+            minority_precisions.append(self.evaluation_results['minority_class_precision'])
+            minority_f1s.append(self.evaluation_results['minority_class_f1'])
+            
+            # Create bar chart
+            x = np.arange(len(model_names))
+            width = 0.25
+            
+            plt.bar(x - width, minority_recalls, width, label='Recall', color='#4ecdc4')
+            plt.bar(x, minority_precisions, width, label='Precision', color='#ff6b6b')
+            plt.bar(x + width, minority_f1s, width, label='F1', color='#ffb400')
+            
+            plt.xlabel('Model', fontsize=12)
+            plt.ylabel('Score', fontsize=12)
+            plt.title('Minority Class (Failing Students) Performance Comparison', fontsize=14)
+            plt.xticks(x, model_names, rotation=45, ha='right')
+            plt.legend()
+            plt.grid(True, alpha=0.3, axis='y')
+            plt.tight_layout()
+            
+            # Add value labels above bars
+            for i, v in enumerate(minority_recalls):
+                plt.text(i - width, v + 0.02, f'{v:.2f}', ha='center', va='bottom', fontsize=9)
+            for i, v in enumerate(minority_precisions):
+                plt.text(i, v + 0.02, f'{v:.2f}', ha='center', va='bottom', fontsize=9)
+            for i, v in enumerate(minority_f1s):
+                plt.text(i + width, v + 0.02, f'{v:.2f}', ha='center', va='bottom', fontsize=9)
+            
+            self.save_plot(fig_models, 'ensemble_model_comparison.png')
+            plt.close(fig_models)
+        
+        # Continue with original plot methods (2-7)
+        # 2a. Precision-Recall Curve (Positive Class)
+        fig_pr = plt.figure(figsize=(10, 8))
         y_test = self.evaluation_results['y_test']
         y_pred_proba = self.evaluation_results['prediction_probabilities']
         
         precision, recall, _ = precision_recall_curve(y_test, y_pred_proba[:, 1])
-        axes[0, 1].plot(recall, precision, marker='.')
-        axes[0, 1].set_xlabel('Recall')
-        axes[0, 1].set_ylabel('Precision')
-        axes[0, 1].set_title('Precision-Recall Curve')
-        axes[0, 1].grid(True)
+        plt.plot(recall, precision, marker='.', linewidth=2)
+        plt.xlabel('Recall', fontsize=12)
+        plt.ylabel('Precision', fontsize=12)
+        plt.title('Precision-Recall Curve (Passing Students)', fontsize=14)
+        plt.grid(True)
+        plt.tight_layout()
+        self.save_plot(fig_pr, 'precision_recall_curve.png')
+        plt.close(fig_pr)
+
+        # 2a. Precision-Recall Curve (Negative Class)
+        fig_pr = plt.figure(figsize=(10, 8))
+        y_test = self.evaluation_results['y_test']
+        y_pred_proba = self.evaluation_results['prediction_probabilities']
+        
+        precision, recall, _ = precision_recall_curve(y_test, y_pred_proba[:, 0], pos_label=0)
+        plt.plot(recall, precision, marker='.', linewidth=2)
+        plt.xlabel('Recall', fontsize=12)
+        plt.ylabel('Precision', fontsize=12)
+        plt.title('Precision-Recall Curve (Failing Students)', fontsize=14)
+        plt.grid(True)
+        plt.tight_layout()
+        self.save_plot(fig_pr, 'precision_recall_curve_negative.png')
+        plt.close(fig_pr)
         
         # 3. ROC Curve
+        fig_roc = plt.figure(figsize=(10, 8))
         fpr, tpr, _ = roc_curve(y_test, y_pred_proba[:, 1])
-        axes[1, 0].plot(fpr, tpr, marker='.')
-        axes[1, 0].plot([0, 1], [0, 1], 'k--')
-        axes[1, 0].set_xlabel('False Positive Rate')
-        axes[1, 0].set_ylabel('True Positive Rate')
-        axes[1, 0].set_title(f'ROC Curve (AUC: {self.evaluation_results["roc_auc"]:.3f})')
+        plt.plot(fpr, tpr, marker='.', linewidth=2)
+        plt.plot([0, 1], [0, 1], 'k--')
+        plt.xlabel('False Positive Rate', fontsize=12)
+        plt.ylabel('True Positive Rate', fontsize=12)
+        plt.title(f'ROC Curve (AUC: {self.evaluation_results["roc_auc"]:.3f})', fontsize=14)
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        self.save_plot(fig_roc, 'roc_curve.png')
+        plt.close(fig_roc)
         
         # 4. Class Distribution
+        fig_dist = plt.figure(figsize=(10, 8))
         class_counts = pd.Series(y_test).value_counts()
-        axes[1, 1].bar(class_counts.index, class_counts.values)
-        axes[1, 1].set_xlabel('Class')
-        axes[1, 1].set_ylabel('Count')
-        axes[1, 1].set_title('Class Distribution')
+        plt.bar(class_counts.index, class_counts.values, color=['#ff6b6b', '#4ecdc4'])
+        plt.xlabel('Class (0=Fail, 1=Pass)', fontsize=12)
+        plt.ylabel('Count', fontsize=12)
+        plt.title('Class Distribution in Test Set', fontsize=14)
         
-        # 5. Metrics Summary
+        # Add count labels on top of bars
+        for i, v in enumerate(class_counts.values):
+            plt.text(class_counts.index[i], v + 0.5, str(v), 
+                    ha='center', fontsize=12, fontweight='bold')
+        
+        plt.tight_layout()
+        self.save_plot(fig_dist, 'class_distribution.png')
+        plt.close(fig_dist)
+        
+        # 5. Metrics Summary as a well-formatted table
+        fig_metrics = plt.figure(figsize=(12, 10))
+        plt.axis('off')
+        
         metrics_text = f"""
-        Accuracy: {self.evaluation_results['accuracy']:.3f}
-        Balanced Accuracy: {self.evaluation_results['balanced_accuracy']:.3f}
-        F1 Score: {self.evaluation_results['f1_score']:.3f}
-        Precision: {self.evaluation_results['precision']:.3f}
-        Recall: {self.evaluation_results['recall']:.3f}
-        ROC AUC: {self.evaluation_results['roc_auc']:.3f}
-        Avg Precision: {self.evaluation_results['average_precision']:.3f}
+        Performance Metrics:
         
-        Minority Class Metrics:
-        Precision: {self.evaluation_results['minority_class_precision']:.3f}
-        Recall: {self.evaluation_results['minority_class_recall']:.3f}
-        F1: {self.evaluation_results['minority_class_f1']:.3f}
+        Overall:
+        • Accuracy: {self.evaluation_results['accuracy']:.3f}
+        • Balanced Accuracy: {self.evaluation_results['balanced_accuracy']:.3f}
+        • F1 Score: {self.evaluation_results['f1_score']:.3f}
+        • Precision: {self.evaluation_results['precision']:.3f}
+        • Recall: {self.evaluation_results['recall']:.3f}
+        • ROC AUC: {self.evaluation_results['roc_auc']:.3f}
+        • Avg Precision: {self.evaluation_results['average_precision']:.3f}
+        
+        Minority Class (Failing Students):
+        • Precision: {self.evaluation_results['minority_class_precision']:.3f}
+        • Recall: {self.evaluation_results['minority_class_recall']:.3f}
+        • F1: {self.evaluation_results['minority_class_f1']:.3f}
         """
-        axes[2, 0].text(0.1, 0.1, metrics_text, fontsize=12, verticalalignment='top')
-        axes[2, 0].axis('off')
+        plt.text(0.1, 0.5, metrics_text, fontsize=14, verticalalignment='center')
+        plt.tight_layout()
+        self.save_plot(fig_metrics, 'performance_metrics.png')
+        plt.close(fig_metrics)
         
-        # 6. Feature Importance with real names
-        best_model = self.grid_search_results['best_model']
-        if hasattr(best_model.named_steps['classifier'], 'feature_importances_'):
+        # 6. Feature Importance with real names - skip if using ensemble
+        if self.imbalance_method != 'ensemble' and hasattr(self.grid_search_results['best_model'].named_steps['classifier'], 'feature_importances_'):
+            fig_imp = plt.figure(figsize=(14, 10))
+            best_model = self.grid_search_results['best_model']
             importances = best_model.named_steps['classifier'].feature_importances_
-            indices = np.argsort(importances)[::-1][:10]  # Top 10 features
+            
+            # Get top 15 features for a more comprehensive view
+            indices = np.argsort(importances)[::-1][:15]
             
             # Get real feature names
             feature_names = self.get_feature_names_after_preprocessing()
             feature_names_top = [feature_names[i] for i in indices]
             
-            axes[2, 1].bar(range(len(indices)), importances[indices])
-            axes[2, 1].set_xticks(range(len(indices)))
-            axes[2, 1].set_xticklabels(feature_names_top, rotation=45, ha='right')
-            axes[2, 1].set_title('Top 10 Feature Importances')
-            axes[2, 1].set_ylabel('Importance')
-        else:
-            axes[2, 1].text(0.5, 0.5, 'Feature importance not available', ha='center', va='center')
-            axes[2, 1].axis('off')
+            # Plot horizontal bar chart for better readability of feature names
+            plt.barh(range(len(indices)), importances[indices], color='#4ecdc4')
+            plt.yticks(range(len(indices)), feature_names_top)
+            plt.xlabel('Importance', fontsize=12)
+            plt.title('Top 15 Feature Importances', fontsize=14)
+            
+            # Add importance values on bars
+            for i, v in enumerate(importances[indices]):
+                plt.text(v + 0.01, i, f'{v:.3f}', va='center', fontsize=10)
+                
+            plt.tight_layout()
+            self.save_plot(fig_imp, 'feature_importances.png')
+            plt.close(fig_imp)
         
+        # 7. Combined Precision-Recall-F1 plot showing the balance between these metrics
+        fig_combined = plt.figure(figsize=(12, 8))
+        
+        # Create combined metrics at different thresholds
+        thresholds = np.arange(0.05, 0.95, 0.05)
+        precision_values = []
+        recall_values = []
+        f1_values = []
+        
+        for threshold in thresholds:
+            y_pred_threshold = (y_pred_proba[:, 1] >= threshold).astype(int)
+            
+            # Focus on failing students (class 0)
+            try:
+                precision = precision_score(y_test, y_pred_threshold, pos_label=0, zero_division=0)
+                recall = recall_score(y_test, y_pred_threshold, pos_label=0, zero_division=0)
+                f1 = f1_score(y_test, y_pred_threshold, pos_label=0, zero_division=0)
+                
+                precision_values.append(precision)
+                recall_values.append(recall)
+                f1_values.append(f1)
+            except:
+                precision_values.append(0)
+                recall_values.append(0)
+                f1_values.append(0)
+        
+        plt.plot(thresholds, precision_values, 'b-o', label='Precision', linewidth=2)
+        plt.plot(thresholds, recall_values, 'g-s', label='Recall', linewidth=2)
+        plt.plot(thresholds, f1_values, 'r-^', label='F1 Score', linewidth=2)
+        
+        # Mark default threshold and custom threshold for ensemble
+        if self.imbalance_method == 'ensemble' and self.ensemble_voting == 'soft':
+            plt.axvline(x=0.5, color='black', linestyle='--', label='Default (0.5)')
+            plt.axvline(x=self.ensemble_threshold, color='purple', linestyle='-', 
+                    label=f'Ensemble threshold ({self.ensemble_threshold:.2f})')
+        else:
+            plt.axvline(x=0.5, color='black', linestyle='--', label='Default (0.5)')
+        
+        # Find best F1 threshold
+        best_f1_idx = np.argmax(f1_values)
+        best_f1_threshold = thresholds[best_f1_idx]
+        plt.axvline(x=best_f1_threshold, color='purple', linestyle=':', 
+                label=f'Best F1 ({best_f1_threshold:.2f})')
+        
+        plt.xlabel('Classification Threshold', fontsize=12)
+        plt.ylabel('Score', fontsize=12)
+        plt.title('Precision-Recall-F1 Trade-off (for Failing Students)', fontsize=14)
+        plt.legend(loc='best', fontsize=12)
+        plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.show()
+        self.save_plot(fig_combined, 'precision_recall_f1_tradeoff.png')
+        plt.close(fig_combined)
+        
+        print("All plots have been saved as separate high-resolution files.")
     
     def plot_probability_distribution(self, figsize=(12, 6)):
         """Plot predicted probability distributions by actual class"""
@@ -230,6 +613,9 @@ class BinaryClassification(BaseStudentPerformance):
         fail_probs = y_pred_proba[y_test == 0, 1]
         axes[0].hist(fail_probs, bins=30, alpha=0.7, color='red', edgecolor='black')
         axes[0].axvline(x=0.5, color='black', linestyle='--', label='Decision Boundary')
+        if self.imbalance_method == 'ensemble' and self.ensemble_voting == 'soft':
+            axes[0].axvline(x=self.ensemble_threshold, color='blue', linestyle='-.', 
+                        label=f'Ensemble Threshold ({self.ensemble_threshold:.2f})')
         axes[0].set_xlabel('Predicted Probability of Passing')
         axes[0].set_ylabel('Count')
         axes[0].set_title('Probability Distribution for Failing Students')
@@ -239,14 +625,18 @@ class BinaryClassification(BaseStudentPerformance):
         pass_probs = y_pred_proba[y_test == 1, 1]
         axes[1].hist(pass_probs, bins=30, alpha=0.7, color='green', edgecolor='black')
         axes[1].axvline(x=0.5, color='black', linestyle='--', label='Decision Boundary')
+        if self.imbalance_method == 'ensemble' and self.ensemble_voting == 'soft':
+            axes[1].axvline(x=self.ensemble_threshold, color='blue', linestyle='-.', 
+                            label=f'Ensemble Threshold ({self.ensemble_threshold:.2f})')
         axes[1].set_xlabel('Predicted Probability of Passing')
         axes[1].set_ylabel('Count')
         axes[1].set_title('Probability Distribution for Passing Students')
         axes[1].legend()
-        
-        plt.tight_layout()
-        plt.show()
     
+        plt.tight_layout()
+        self.save_plot(fig, 'probability_distribution.png')
+        
+   
     def plot_threshold_analysis(self, figsize=(10, 6)):
         """Analyze model performance at different classification thresholds"""
         y_test = self.evaluation_results['y_test']
@@ -285,11 +675,16 @@ class BinaryClassification(BaseStudentPerformance):
                 recalls.append(0)
                 f1_scores.append(0)
         
-        plt.figure(figsize=figsize)
+        fig = plt.figure(figsize=figsize)
         plt.plot(thresholds, precisions, label='Precision (Failing Students)', marker='o')
         plt.plot(thresholds, recalls, label='Recall (Failing Students)', marker='s')
         plt.plot(thresholds, f1_scores, label='F1 Score (Failing Students)', marker='^')
         plt.axvline(x=0.5, color='black', linestyle='--', label='Default Threshold')
+        
+        # If ensemble method, also show the ensemble threshold
+        if self.imbalance_method == 'ensemble' and self.ensemble_voting == 'soft':
+            plt.axvline(x=self.ensemble_threshold, color='blue', linestyle='-.', 
+                        label=f'Ensemble Threshold ({self.ensemble_threshold:.2f})')
         
         # Find optimal threshold for F1 score of failing students
         optimal_idx = np.argmax(f1_scores)
@@ -297,7 +692,7 @@ class BinaryClassification(BaseStudentPerformance):
         plt.axvline(x=optimal_threshold, color='red', linestyle=':', label=f'Optimal F1 Threshold ({optimal_threshold:.2f})')
         
         # Add annotation for threshold interpretation
-        plt.text(0.02, 0.8, 'Lower threshold → More students predicted to fail\nHigher threshold → Fewer students predicted to fail', 
+        plt.text(0.02, 0.9, 'Lower threshold → More students predicted to fail\nHigher threshold → Fewer students predicted to fail', 
                 fontsize=9, style='italic', alpha=0.7, transform=plt.gca().transAxes)
         
         plt.xlabel('Probability Threshold for Predicting "Pass" (Class 1)')
@@ -306,10 +701,12 @@ class BinaryClassification(BaseStudentPerformance):
         plt.legend()
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.show()
+
+        self.save_plot(fig, 'threshold_analysis.png')
+        
         
         return optimal_threshold
-    
+   
     def get_misclassified_samples(self, X_test, include_proba=True):
         """Get samples that were misclassified for further analysis"""
         y_test = self.evaluation_results['y_test']
@@ -330,7 +727,7 @@ class BinaryClassification(BaseStudentPerformance):
             misclassified_df = misclassified_df.sort_values('prob_pass', ascending=False)
         
         return misclassified_df
-    
+   
     def find_threshold_for_precision(self, target_precision, X_test, y_test, min_samples_per_class=10):
         """
         Find the probability threshold that achieves the target precision.
@@ -443,7 +840,6 @@ class BinaryClassification(BaseStudentPerformance):
             
             try:
                 # For detecting failing students (class 0), we need to measure precision for class 0
-                # But we need to be careful about undefined metrics
                 n_predicted_fail = np.sum(y_pred_threshold == 0)
                 n_predicted_pass = np.sum(y_pred_threshold == 1)
                 
@@ -465,7 +861,6 @@ class BinaryClassification(BaseStudentPerformance):
             except:
                 continue
         
-        # Create the plot
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize)
         
         # Plot 1: Main metrics
@@ -473,10 +868,16 @@ class BinaryClassification(BaseStudentPerformance):
         ax1.plot(valid_thresholds, recalls, 'g-', label='Recall (Failing Students)', linewidth=2)
         ax1.plot(valid_thresholds, f1_scores, 'r-', label='F1 Score (Failing Students)', linewidth=2)
         
-        # Add precision target lines
+        # Add horizontal lines for target precisions
         for target_precision in [0.8, 0.85, 0.9, 0.95]:
             ax1.axhline(y=target_precision, color='gray', linestyle='--', alpha=0.5)
             ax1.text(0.02, target_precision + 0.005, f'{target_precision*100:.0f}%', fontsize=9)
+        
+        # Mark thresholds
+        ax1.axvline(x=0.5, color='black', linestyle='--', label='Default (0.5)')
+        if self.imbalance_method == 'ensemble' and self.ensemble_voting == 'soft':
+            ax1.axvline(x=self.ensemble_threshold, color='blue', linestyle='-.', 
+                        label=f'Ensemble ({self.ensemble_threshold:.2f})')
         
         ax1.set_xlabel('Probability Threshold for Predicting "Pass" (Class 1)')
         ax1.set_ylabel('Score')
@@ -486,7 +887,6 @@ class BinaryClassification(BaseStudentPerformance):
         ax1.set_xlim(0, 1)
         ax1.set_ylim(0, 1.05)
         
-        # Add annotation about threshold interpretation
         ax1.text(0.98, 0.02, 'Low threshold → More students predicted to fail\nHigh threshold → Fewer students predicted to fail', 
                 ha='right', va='bottom', fontsize=9, style='italic', alpha=0.7)
         
@@ -504,6 +904,12 @@ class BinaryClassification(BaseStudentPerformance):
         ax2.axhline(y=np.sum(y_test == 0), color='red', linestyle=':', label='Actual Failing')
         ax2.axhline(y=np.sum(y_test == 1), color='green', linestyle=':', label='Actual Passing')
         
+        # Mark thresholds on second plot too
+        ax2.axvline(x=0.5, color='black', linestyle='--', label='Default (0.5)')
+        if self.imbalance_method == 'ensemble' and self.ensemble_voting == 'soft':
+            ax2.axvline(x=self.ensemble_threshold, color='blue', linestyle='-.', 
+                        label=f'Ensemble ({self.ensemble_threshold:.2f})')
+        
         ax2.set_xlabel('Probability Threshold for Predicting "Pass" (Class 1)')
         ax2.set_ylabel('Number of Students')
         ax2.set_title('Predicted Class Sizes vs Threshold')
@@ -512,9 +918,8 @@ class BinaryClassification(BaseStudentPerformance):
         ax2.set_xlim(0, 1)
         
         plt.tight_layout()
-        plt.show()
+        self.save_plot(fig, 'precision_threshold_tradeoff.png')
         
-        # Return some key insights with proper handling of edge cases
         try:
             high_precision_thresholds = [p for p in precisions if p >= 0.9]
             if high_precision_thresholds:
@@ -561,11 +966,11 @@ class BinaryClassification(BaseStudentPerformance):
         failing_probabilities = y_pred_proba[failing_mask]
         
         # Add probability information
-        failing_students['fail_probability'] = failing_probabilities
+        failing_students['fail_probability'] = 1 - failing_probabilities  # Convert to probability of failing
         failing_students['predicted_class'] = 0
         
         # Sort by confidence (probability of failing)
-        failing_students = failing_students.sort_values('fail_probability', ascending=True)
+        failing_students = failing_students.sort_values('fail_probability', ascending=False)
         
         # Create summary statistics
         summary = {
@@ -576,7 +981,8 @@ class BinaryClassification(BaseStudentPerformance):
         }
         
         # Get feature importance for context
-        if hasattr(model.named_steps['classifier'], 'feature_importances_'):
+        # Skip for ensemble methods since they don't have a simple feature_importances_ attribute
+        if self.imbalance_method != 'ensemble' and hasattr(model.named_steps['classifier'], 'feature_importances_'):
             feature_names = self.get_feature_names_after_preprocessing()
             feature_importance = model.named_steps['classifier'].feature_importances_
             
@@ -593,5 +999,8 @@ class BinaryClassification(BaseStudentPerformance):
             summary['important_features'] = sorted(feature_stats.items(), 
                                                 key=lambda x: x[1]['importance'], 
                                                 reverse=True)[:10]
+        elif self.imbalance_method == 'ensemble':
+            # For ensemble models, add a note about feature importance
+            summary['ensemble_note'] = "Feature importance not available for ensemble models"
         
         return failing_students, summary

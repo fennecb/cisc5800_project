@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
+# import seaborn as sns
 from ucimlrepo import fetch_ucirepo
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
 from sklearn.model_selection import train_test_split
@@ -9,16 +9,29 @@ from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
+import os
 
 from Enums.ColumnTypes import ColumnTypes
+
+import warnings
+warnings.filterwarnings("ignore")
+from sklearn.exceptions import ConvergenceWarning
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 class BaseStudentPerformance:
     """Base class for all student performance prediction tasks"""
     def __init__(self):
-        self.data = fetch_ucirepo(id=320)
-        self.X = self.data.data.features
-        self.raw_targets = self.data.data.targets
-        
+        try: # Source the data locally first (faster).
+            filename = 'student-por.csv'
+            file_path = os.path.join(os.getcwd(), filename)
+            self.data = pd.read_csv(file_path, sep=';')
+            self.X = self.data.iloc[:, :-3]
+            self.raw_targets = self.data.iloc[:, -3:]
+        except: # If not there, download from source
+            self.data = fetch_ucirepo(id=320)
+            self.X = self.data.data.features
+            self.raw_targets = self.data.data.targets
+
     def prepare_features(self, X_train=None):
         """Create preprocessing components - shared across all tasks"""
         from sklearn.preprocessing import FunctionTransformer
@@ -39,20 +52,17 @@ class BaseStudentPerformance:
                     mapped = X_encoded[col].map(binary_mapping)
                     X_encoded[col] = mapped.fillna(X_encoded[col])
             return X_encoded
-        
-        # Get feature lists from ColumnTypes enum
+
         self.numeric_features = ColumnTypes.NUMERIC_FEATURES.value
         self.binary_features = ColumnTypes.BINARY_FEATURES.value
         self.categorical_features = ColumnTypes.CATEGORICAL_FEATURES_TO_ENCODE.value
         self.ordinal_features = ColumnTypes.ORDINAL_FEATURES.value
-        
-        # Create transformers
+
         self.binary_transformer = FunctionTransformer(binary_encoder, validate=False)
         self.numeric_transformer = StandardScaler()
         self.categorical_transformer = OneHotEncoder(drop='first', sparse_output=False, handle_unknown='ignore')
         self.ordinal_transformer = OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1)
-        
-        # Create the ColumnTransformer
+
         self.column_transformer = ColumnTransformer([
             ('num', self.numeric_transformer, self.numeric_features + self.binary_features),
             ('cat', self.categorical_transformer, self.categorical_features),
@@ -90,8 +100,7 @@ class BaseStudentPerformance:
             'test_size': test_size,
             'random_state': random_state
         }
-        
-        # Only add stratify if it's not None
+
         if stratify is not None:
             kwargs['stratify'] = stratify
             
@@ -152,15 +161,12 @@ class BaseStudentPerformance:
     def create_base_pipeline(self, estimator):
         """Create base pipeline with preprocessing - to be extended by subclasses"""
         from imblearn.pipeline import Pipeline as ImbPipeline
-        
-        # Base pipeline steps
+
         steps = [
             ('binary_encode', self.binary_transformer),
             ('column_transform', self.column_transformer),
+            ('estimator', estimator)
         ]
-        
-        # Add estimator
-        steps.append(('estimator', estimator))
         
         return ImbPipeline(steps)
     
@@ -214,3 +220,18 @@ class BaseStudentPerformance:
         self.y = self.raw_targets[target]
         self.task_type = 'regression'
         return self.y
+    
+    def save_plot(self, fig=None, filename='plot.png'):
+        """Save the current plot to file"""
+        if fig is None:
+            fig = plt.gcf()  # Get current figure
+        
+        # Save figure if plots_dir is defined
+        if hasattr(self, 'plots_dir') and self.plots_dir is not None:
+            filepath = os.path.join(self.plots_dir, filename)
+            fig.savefig(filepath, dpi=300, bbox_inches='tight')
+            print(f"Plot saved to {filepath}")
+            return filepath
+        else:
+            print("Warning: plots_dir not set, plot not saved")
+            return None
