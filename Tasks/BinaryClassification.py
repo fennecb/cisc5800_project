@@ -27,7 +27,7 @@ warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 class BinaryClassification(BaseStudentPerformance):
     def __init__(self, threshold=10, imbalance_method='smote', 
-                class_weight_ratio=10.0, ensemble_models=None,
+                class_weight_ratio=5.49, ensemble_models=None,
                 ensemble_voting='soft', ensemble_threshold=0.4):
         super().__init__()
         self.transform_target_binary(threshold)
@@ -158,9 +158,9 @@ class BinaryClassification(BaseStudentPerformance):
                             # Define various class weight ratios to try
                             class_weight_options = [
                                 {0: 5, 1: 1},
-                                {0: 10, 1: 1},
-                                {0: 20, 1: 1},
-                                {0: 50, 1: 1},
+                                # {0: 10, 1: 1},
+                                # {0: 20, 1: 1},
+                                # {0: 50, 1: 1},
                                 'balanced'
                             ]
                             model_param_grid['classifier__class_weight'] = class_weight_options
@@ -266,9 +266,9 @@ class BinaryClassification(BaseStudentPerformance):
                     # Define various class weight ratios to try
                     class_weight_options = [
                         {0: 5, 1: 1},
-                        {0: 10, 1: 1},
-                        {0: 20, 1: 1},
-                        {0: 50, 1: 1},
+                        # {0: 10, 1: 1},
+                        # {0: 20, 1: 1},
+                        # {0: 50, 1: 1},
                         'balanced'
                     ]
                     param_grid['classifier__class_weight'] = class_weight_options
@@ -318,7 +318,7 @@ class BinaryClassification(BaseStudentPerformance):
             
             return grid_search
     
-    def evaluate_model(self, X_test, y_test, grid_search=None):
+    def evaluate_model(self, X_test, y_test, grid_search=None, prediction_threshold=0.5):
         """Evaluate the model with metrics suitable for imbalanced data"""
         # Use the best model from grid search
         if grid_search is None:
@@ -328,27 +328,26 @@ class BinaryClassification(BaseStudentPerformance):
 
         y_pred_proba = model.predict_proba(X_test)
         
-        # For ensemble with soft voting, apply custom threshold
-        if self.imbalance_method == 'ensemble' and self.ensemble_voting == 'soft':
-            # Lower threshold to favor failing class prediction (class 0)
-            y_pred = (y_pred_proba[:, 1] >= self.ensemble_threshold).astype(int)
+        # Apply custom threshold if different from default
+        if prediction_threshold != 0.5:
+            y_pred = (y_pred_proba[:, 1] >= prediction_threshold).astype(int)
         else:
-            # Use standard prediction
             y_pred = model.predict(X_test)
 
         metrics = {
             'accuracy': accuracy_score(y_test, y_pred),
             'balanced_accuracy': balanced_accuracy_score(y_test, y_pred),
             'f1_score': f1_score(y_test, y_pred, average='weighted'),
-            'precision': precision_score(y_test, y_pred, average='weighted', zero_division=0),
-            'recall': recall_score(y_test, y_pred, average='weighted', zero_division=0),
+            'precision': precision_score(y_test, y_pred, average='weighted'),
+            'recall': recall_score(y_test, y_pred, average='weighted'),
             'confusion_matrix': confusion_matrix(y_test, y_pred),
             'classification_report': classification_report(y_test, y_pred),
             'roc_auc': roc_auc_score(y_test, y_pred_proba[:, 1]),
             'average_precision': average_precision_score(y_test, y_pred_proba[:, 1]),
             'predictions': y_pred,
             'prediction_probabilities': y_pred_proba,
-            'y_test': y_test
+            'y_test': y_test,
+            'threshold_used': prediction_threshold
         }
         
         # For minority class
@@ -1004,3 +1003,209 @@ class BinaryClassification(BaseStudentPerformance):
             summary['ensemble_note'] = "Feature importance not available for ensemble models"
         
         return failing_students, summary
+    
+    def find_threshold_for_negative_class_accuracy(self, target_accuracy, X_test, y_test=None, min_samples=10):
+        """
+        Find a probability threshold that achieves the target accuracy for the negative class (failing students).
+        
+        Parameters:
+        ----------
+        target_accuracy : float
+            Desired accuracy for the negative class (e.g., 0.8 for 80% accuracy)
+        X_test : DataFrame
+            Test features
+        y_test : Series, optional
+            Test labels, if not already stored in evaluation_results
+        min_samples : int
+            Minimum number of samples in each predicted class
+            
+        Returns:
+        -------
+        float
+            Optimal threshold
+        float
+            Achieved negative class accuracy
+        dict
+            Detailed results at the optimal threshold
+        """
+        # Get prediction probabilities
+        if hasattr(self, 'evaluation_results') and y_test is None:
+            y_pred_proba = self.evaluation_results['prediction_probabilities'][:, 1]
+            y_test_stored = self.evaluation_results['y_test']
+        else:
+            model = self.grid_search_results['best_model']
+            y_pred_proba = model.predict_proba(X_test)[:, 1]
+            y_test_stored = y_test
+        
+        # Test different thresholds
+        thresholds = np.arange(0.01, 1.00, 0.01)
+        negative_accuracies = []
+        valid_thresholds = []
+        
+        for threshold in thresholds:
+            y_pred_threshold = (y_pred_proba >= threshold).astype(int)
+            
+            # Check if we have enough samples in both classes
+            n_predicted_fail = np.sum(y_pred_threshold == 0)
+            n_predicted_pass = np.sum(y_pred_threshold == 1)
+            
+            if n_predicted_fail < min_samples or n_predicted_pass < min_samples:
+                continue
+            
+            # Calculate negative class accuracy (class 0)
+            # This is the ratio of correctly predicted failing students to all actual failing students
+            neg_class_mask = y_test_stored == 0
+            neg_correct = np.sum((y_pred_threshold[neg_class_mask] == 0))
+            neg_total = np.sum(neg_class_mask)
+            
+            if neg_total > 0:
+                neg_accuracy = neg_correct / neg_total
+                negative_accuracies.append(neg_accuracy)
+                valid_thresholds.append(threshold)
+        
+        if not negative_accuracies:
+            raise ValueError("No valid thresholds found. Try adjusting min_samples parameter.")
+        
+        # Find threshold that exceeds or is closest to target accuracy
+        above_target = [acc >= target_accuracy for acc in negative_accuracies]
+        
+        if any(above_target):
+            # Get the lowest threshold that meets or exceeds target
+            best_idx = above_target.index(True)
+        else:
+            # Get the threshold with highest accuracy if none meet target
+            best_idx = np.argmax(negative_accuracies)
+        
+        optimal_threshold = valid_thresholds[best_idx]
+        achieved_accuracy = negative_accuracies[best_idx]
+        
+        # Generate detailed results at optimal threshold
+        y_pred_optimal = (y_pred_proba >= optimal_threshold).astype(int)
+        
+        # Calculate metrics for both classes
+        cm = confusion_matrix(y_test_stored, y_pred_optimal)
+        tn, fp, fn, tp = cm.ravel()
+        
+        negative_class_metrics = {
+            'accuracy': tn / (tn + fp) if (tn + fp) > 0 else 0,
+            'precision': tn / (tn + fn) if (tn + fn) > 0 else 0,
+            'recall': tn / (tn + fp) if (tn + fp) > 0 else 0,
+            'f1_score': 2 * tn / (2 * tn + fp + fn) if (2 * tn + fp + fn) > 0 else 0
+        }
+        
+        threshold_results = {
+            'threshold': optimal_threshold,
+            'negative_class_accuracy': achieved_accuracy,
+            'accuracy': accuracy_score(y_test_stored, y_pred_optimal),
+            'balanced_accuracy': balanced_accuracy_score(y_test_stored, y_pred_optimal),
+            'confusion_matrix': cm,
+            'negative_class_metrics': negative_class_metrics,
+            'predictions': y_pred_optimal,
+            'n_predicted_fail': np.sum(y_pred_optimal == 0),
+            'n_predicted_pass': np.sum(y_pred_optimal == 1),
+            'n_actual_fail': np.sum(y_test_stored == 0),
+            'n_actual_pass': np.sum(y_test_stored == 1)
+        }
+        
+        return optimal_threshold, achieved_accuracy, threshold_results
+
+    def find_threshold_for_negative_class_recall(self, target_recall, X_test, y_test=None, min_samples=10):
+        """
+        Find a probability threshold that achieves the target recall for the negative class (failing students).
+        
+        Parameters:
+        ----------
+        target_recall : float
+            Desired recall for the negative class (e.g., 0.8 for 80% recall)
+        X_test : DataFrame
+            Test features
+        y_test : Series, optional
+            Test labels, if not already stored in evaluation_results
+        min_samples : int
+            Minimum number of samples in each predicted class
+            
+        Returns:
+        -------
+        float
+            Optimal threshold
+        float
+            Achieved negative class recall
+        dict
+            Detailed results at the optimal threshold
+        """
+        # Get prediction probabilities
+        if hasattr(self, 'evaluation_results') and y_test is None:
+            y_pred_proba = self.evaluation_results['prediction_probabilities'][:, 1]
+            y_test_stored = self.evaluation_results['y_test']
+        else:
+            model = self.grid_search_results['best_model']
+            y_pred_proba = model.predict_proba(X_test)[:, 1]
+            y_test_stored = y_test
+        
+        # Test different thresholds
+        thresholds = np.arange(0.01, 1.00, 0.01)
+        recalls = []
+        valid_thresholds = []
+        
+        for threshold in thresholds:
+            y_pred_threshold = (y_pred_proba >= threshold).astype(int)
+            
+            # Check if we have enough samples in both classes
+            n_predicted_fail = np.sum(y_pred_threshold == 0)
+            n_predicted_pass = np.sum(y_pred_threshold == 1)
+            
+            if n_predicted_fail < min_samples or n_predicted_pass < min_samples:
+                continue
+            
+            # For negative class (0), recall is the proportion of actual class 0 that are correctly predicted
+            tn, fp, fn, tp = confusion_matrix(y_test_stored, y_pred_threshold).ravel()
+            
+            # Negative class recall = true negative / (true negative + false positive)
+            neg_class_recall = tn / (tn + fp) if (tn + fp) > 0 else 0
+            
+            recalls.append(neg_class_recall)
+            valid_thresholds.append(threshold)
+        
+        if not recalls:
+            raise ValueError("No valid thresholds found. Try adjusting min_samples parameter.")
+        
+        # Find threshold that exceeds or is closest to target recall
+        above_target = [rec >= target_recall for rec in recalls]
+        
+        if any(above_target):
+            # Get the lowest threshold that meets or exceeds target
+            best_idx = above_target.index(True)
+        else:
+            # Get the threshold with highest recall if none meet target
+            best_idx = np.argmax(recalls)
+        
+        optimal_threshold = valid_thresholds[best_idx]
+        achieved_recall = recalls[best_idx]
+        
+        # Generate detailed results at optimal threshold
+        y_pred_optimal = (y_pred_proba >= optimal_threshold).astype(int)
+        
+        # Calculate detailed metrics
+        cm = confusion_matrix(y_test_stored, y_pred_optimal)
+        tn, fp, fn, tp = cm.ravel()
+        
+        negative_class_precision = tn / (tn + fn) if (tn + fn) > 0 else 0
+        negative_class_recall = tn / (tn + fp) if (tn + fp) > 0 else 0
+        negative_class_f1 = 2 * tn / (2 * tn + fn + fp) if (2 * tn + fn + fp) > 0 else 0
+        
+        threshold_results = {
+            'threshold': optimal_threshold,
+            'negative_class_recall': negative_class_recall,
+            'negative_class_precision': negative_class_precision,
+            'negative_class_f1': negative_class_f1,
+            'accuracy': accuracy_score(y_test_stored, y_pred_optimal),
+            'balanced_accuracy': balanced_accuracy_score(y_test_stored, y_pred_optimal),
+            'confusion_matrix': cm,
+            'predictions': y_pred_optimal,
+            'n_predicted_fail': np.sum(y_pred_optimal == 0),
+            'n_predicted_pass': np.sum(y_pred_optimal == 1),
+            'n_actual_fail': np.sum(y_test_stored == 0),
+            'n_actual_pass': np.sum(y_test_stored == 1)
+        }
+        
+        return optimal_threshold, achieved_recall, threshold_results

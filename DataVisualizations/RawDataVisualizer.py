@@ -375,7 +375,15 @@ class RawDataVisualizer:
         # Create a second, focused correlation plot just for the grades
         plt.figure(figsize=(10, 8))
         grade_corr = correlation_data[['G1', 'G2', 'G3']].corr()
-        sns.heatmap(grade_corr, annot=True, cmap='YlGnBu', fmt='.3f', linewidths=.5, square=True)
+        sns.heatmap(
+            grade_corr, 
+            annot=True, 
+            cmap='YlGnBu', 
+            fmt='.3f', 
+            linewidths=.5, 
+            square=True, 
+            annot_kws={"size": 20}
+        )
         plt.title('Correlation Between Grade Variables', fontsize=15)
         
         plt.tight_layout()

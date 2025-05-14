@@ -5,7 +5,6 @@ from Tasks.BinaryClassification import BinaryClassification
 from Tasks.MultiClassification import MultiClassification
 from Tasks.Regression import Regression
 from SavingResults.OutputCapture import OutputCapture, setup_experiment_dir
-from SavingResults.NullContext import NullContext
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -91,23 +90,18 @@ def main():
                        default='smote',
                        help='Method for handling class imbalance (default: smote)')
     
-    parser.add_argument('--class_weight_ratio', 
-                       type=float, 
-                       default=10.0,
-                       help='Weight ratio for minority:majority classes (default: 10.0)')
-    
     parser.add_argument('--ensemble_models', 
                        type=str,
                        nargs='+',
                        default=['random_forest', 'logistic_regression', 'xgboost'],
                        choices=['random_forest', 'logistic_regression', 'xgboost', 
-                               'gradient_boosting', 'svm', 'extra_trees'],
+                               'gradient_boosting', 'svm', 'extra_trees', 'knn'],
                        help='Models to use in ensemble (when ensemble method is selected)')
     
     parser.add_argument('--ensemble_voting', 
                        choices=['hard', 'soft', 'single'],
-                       default='soft',
-                       help='Voting method for ensemble (default: soft)')
+                       default='single',
+                       help='Voting method for ensemble (default: single (no ensemble))')
     
     parser.add_argument('--ensemble_threshold', 
                        type=float, 
@@ -117,6 +111,16 @@ def main():
     parser.add_argument('--save_results', 
                         action='store_true',
                         help='Save experiment results to disk')
+    
+    parser.add_argument('--target_negative_accuracy', 
+                        type=float, 
+                        default=None,
+                        help='Target accuracy for negative class (failing students) for threshold selection')
+
+    parser.add_argument('--target_negative_recall', 
+                        type=float, 
+                        default=None,
+                        help='Target recall for negative class (failing students) for threshold selection')
 
     args = parser.parse_args()
 
@@ -171,7 +175,6 @@ def main():
             model = BinaryClassification(
                 threshold=args.threshold,
                 imbalance_method=args.imbalance_method,
-                class_weight_ratio=args.class_weight_ratio,
                 ensemble_models=args.ensemble_models,
                 ensemble_voting=args.ensemble_voting,
                 ensemble_threshold=args.ensemble_threshold
@@ -187,12 +190,9 @@ def main():
             model = BinaryClassification(
                 threshold=args.threshold,
                 imbalance_method=args.imbalance_method,
-                class_weight_ratio=args.class_weight_ratio
             )
             print(f"Binary classification with threshold: {args.threshold}")
             print(f"Imbalance method: {args.imbalance_method}")
-            if args.imbalance_method == 'class_weight':
-                print(f"Class weight ratio (failing:passing): {args.class_weight_ratio}:1")
         
         if args.save_results:
             model.plots_dir = plots_dir
@@ -242,7 +242,14 @@ def main():
         )
 
     print("\nEvaluating model on test set...")
-    results = model.evaluate_model(X_test, y_test)
+    if args.ensemble_voting == 'soft':
+        print(f"Using custom ensemble threshold: {args.ensemble_threshold}")
+        results = model.evaluate_model(X_test, y_test, prediction_threshold=args.ensemble_threshold)
+    elif (args.model_type == 'binary' and args.prediction_threshold != 0.5):
+        print(f"Using custom prediction threshold: {args.prediction_threshold}")
+        results = model.evaluate_model(X_test, y_test, prediction_threshold=args.prediction_threshold)
+    else:
+        results = model.evaluate_model(X_test, y_test)
 
     if args.model_type == 'binary':
         # Find optimal threshold based on target precision
@@ -265,6 +272,23 @@ def main():
                 print(f"Could not find threshold for target precision: {e}")
                 print("Using default threshold...")
                 use_custom_threshold = False
+
+        elif args.target_negative_accuracy is not None:
+            print(f"\nFinding threshold for {args.target_negative_accuracy*100}% negative class accuracy...")
+            threshold, actual_accuracy, threshold_results = model.find_threshold_for_negative_class_accuracy(
+                args.target_negative_accuracy, X_test, y_test
+            )
+            print(f"Optimal threshold: {threshold:.3f}")
+            print(f"Achieved negative class accuracy: {actual_accuracy:.3f}")
+
+        elif args.target_negative_recall is not None:
+            print(f"\nFinding threshold for {args.target_negative_recall*100}% negative class recall...")
+            threshold, actual_recall, threshold_results = model.find_threshold_for_negative_class_recall(
+                args.target_negative_recall, X_test, y_test
+            )
+            print(f"Optimal threshold: {threshold:.3f}")
+            print(f"Achieved negative class recall: {actual_recall:.3f}")
+
         else:
             use_custom_threshold = False
     
@@ -274,6 +298,10 @@ def main():
     print("="*50)
     
     if args.model_type == 'binary':
+        if args.prediction_threshold != 0.5:
+            print(f"\nResults with Custom Threshold ({args.prediction_threshold}):")
+        else:
+            print("\nResults with Default Threshold (0.5):")
         if hasattr(model, 'custom_threshold_results'):
             # Show results with custom threshold
             custom_results = model.custom_threshold_results
