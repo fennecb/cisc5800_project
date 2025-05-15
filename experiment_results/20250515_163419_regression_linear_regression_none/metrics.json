@@ -1,0 +1,11 @@
+{
+    "r2": 0.21962774281599406,
+    "rmse": 2.8676370997033187,
+    "mae": 2.1638194787734824,
+    "mape": 952464226556150.5,
+    "explained_variance": 0.22008284930054245,
+    "best_params": {
+        "regressor__fit_intercept": true,
+        "regressor__positive": false
+    }
+}

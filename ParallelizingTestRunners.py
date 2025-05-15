@@ -6,16 +6,7 @@ num_cores = multiprocessing.cpu_count()
 print(f"Detected {num_cores} CPU cores")
 
 experiments = [
-    "--model_type binary --algorithm random_forest --save_results --ensemble_voting single --imbalance_method class_weight",
-    "--model_type binary --algorithm logistic_regression --save_results --ensemble_voting single --imbalance_method undersampling",
-    "--model_type binary --algorithm gradient_boosting --save_results --ensemble_voting single",
-    "--model_type binary --algorithm gradient_boosting --save_results --ensemble_voting single --imbalance_method class_weight",
-    "--model_type binary --algorithm knn --save_results --ensemble_voting single --imbalance_method undersampling",
-    "--model_type binary --algorithm naive_bayes --save_results --ensemble_voting single",
-    "--model_type binary --algorithm naive_bayes --save_results --ensemble_voting single --imbalance_method class_weight",
-    "--model_type binary --algorithm xgboost --save_results --ensemble_voting single --imbalance_method class_weight",
-    "--model_type regression --algorithm random_forest --save_results --ensemble_voting single",
-    "--model_type regression --algorithm svr --save_results --ensemble_voting single",
+    "--model_type binary --algorithm logistic_regression --save_results --ensemble_voting single --imbalance_method class_weight",
 ]
 
 def run_experiment(args):

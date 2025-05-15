@@ -196,6 +196,7 @@ def main():
         
         if args.save_results:
             model.plots_dir = plots_dir
+            # model.generate_single_model_visualizations(output_dir=plots_dir)
         if args.target_precision is not None:
             print(f"Target precision: {args.target_precision}")
         else:

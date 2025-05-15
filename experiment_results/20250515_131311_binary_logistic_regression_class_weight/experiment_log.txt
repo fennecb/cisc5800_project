@@ -1,9 +1,9 @@
 
 ============================== EXPERIMENT CONFIGURATION ==============================
 model_type: binary
-algorithm: random_forest
+algorithm: logistic_regression
 threshold: 10.0
-prediction_threshold: 0.7
+prediction_threshold: 0.5
 target_precision: None
 detailed_binary_analysis: False
 n_bins: 5

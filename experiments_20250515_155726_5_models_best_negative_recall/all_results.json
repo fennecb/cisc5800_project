@@ -1,0 +1,142 @@
+{
+    "binary": {
+        "random_forest": {
+            "accuracy": 0.5953488372093023,
+            "balanced_accuracy": 0.7113719613719613,
+            "f1_score": 0.649498164014688,
+            "minority_class_precision": 0.25892857142857145,
+            "minority_class_recall": 0.8787878787878788,
+            "minority_class_f1": 0.4,
+            "roc_auc": 0.7730602730602731,
+            "average_precision": 0.9462319916534808,
+            "best_params": {
+                "classifier__class_weight": "balanced",
+                "classifier__max_depth": 3,
+                "classifier__min_samples_split": 2,
+                "classifier__n_estimators": 100,
+                "smote__k_neighbors": 7
+            },
+            "class_distribution": {
+                "1": 549,
+                "0": 100
+            },
+            "probability_threshold": 0.7000000000000001
+        },
+        "gradient_boosting": {
+            "accuracy": 0.7674418604651163,
+            "balanced_accuracy": 0.7013819513819514,
+            "f1_score": 0.7902416780665753,
+            "minority_class_precision": 0.3508771929824561,
+            "minority_class_recall": 0.6060606060606061,
+            "minority_class_f1": 0.4444444444444444,
+            "roc_auc": 0.7607392607392607,
+            "average_precision": 0.9447465926548311,
+            "best_params": {
+                "classifier__learning_rate": 0.2,
+                "classifier__max_depth": 7,
+                "classifier__min_samples_leaf": 1,
+                "classifier__min_samples_split": 5,
+                "classifier__n_estimators": 100,
+                "classifier__subsample": 1.0,
+                "smote__k_neighbors": 7
+            },
+            "class_distribution": {
+                "1": 549,
+                "0": 100
+            },
+            "probability_threshold": 0.98
+        },
+        "knn": {
+            "accuracy": 0.31627906976744186,
+            "balanced_accuracy": 0.5713453213453213,
+            "f1_score": 0.32897976816185465,
+            "minority_class_precision": 0.17613636363636365,
+            "minority_class_recall": 0.9393939393939394,
+            "minority_class_f1": 0.2966507177033493,
+            "roc_auc": 0.6705794205794207,
+            "average_precision": 0.9060712038555707,
+            "best_params": {
+                "classifier__algorithm": "auto",
+                "classifier__n_neighbors": 11,
+                "classifier__p": 2,
+                "classifier__weights": "uniform",
+                "smote__k_neighbors": 5
+            },
+            "class_distribution": {
+                "1": 549,
+                "0": 100
+            },
+            "probability_threshold": 0.91
+        },
+        "xgboost": {
+            "accuracy": 0.5116279069767442,
+            "balanced_accuracy": 0.6619214119214119,
+            "f1_score": 0.5682292910719926,
+            "minority_class_precision": 0.2230769230769231,
+            "minority_class_recall": 0.8787878787878788,
+            "minority_class_f1": 0.3558282208588957,
+            "roc_auc": 0.7582417582417582,
+            "average_precision": 0.9393733224247204,
+            "best_params": {
+                "classifier__colsample_bytree": 1.0,
+                "classifier__learning_rate": 0.05,
+                "classifier__max_depth": 3,
+                "classifier__min_child_weight": 7,
+                "classifier__n_estimators": 100,
+                "classifier__subsample": 1.0,
+                "smote__k_neighbors": 7
+            },
+            "class_distribution": {
+                "1": 549,
+                "0": 100
+            },
+            "probability_threshold": 0.93
+        },
+        "svm": {
+            "accuracy": 0.5395348837209303,
+            "balanced_accuracy": 0.6784049284049284,
+            "f1_score": 0.5962375944304547,
+            "minority_class_precision": 0.23387096774193547,
+            "minority_class_recall": 0.8787878787878788,
+            "minority_class_f1": 0.36942675159235666,
+            "roc_auc": 0.7157842157842158,
+            "average_precision": 0.9228102906743822,
+            "best_params": {
+                "classifier__C": 0.1,
+                "classifier__gamma": "scale",
+                "classifier__kernel": "sigmoid",
+                "smote__k_neighbors": 7
+            },
+            "class_distribution": {
+                "1": 549,
+                "0": 100
+            },
+            "probability_threshold": 0.77
+        },
+        "logistic_regression": {
+            "accuracy": 0.6046511627906976,
+            "balanced_accuracy": 0.7168664668664668,
+            "f1_score": 0.6580566342336053,
+            "minority_class_precision": 0.2636363636363636,
+            "minority_class_recall": 0.8787878787878788,
+            "minority_class_f1": 0.40559440559440557,
+            "roc_auc": 0.7576590076590076,
+            "average_precision": 0.9338906536909621,
+            "best_params": {
+                "classifier__C": 0.01,
+                "classifier__class_weight": "balanced",
+                "classifier__max_iter": 2500,
+                "classifier__penalty": "l1",
+                "classifier__solver": "liblinear",
+                "smote__k_neighbors": 7
+            },
+            "class_distribution": {
+                "1": 549,
+                "0": 100
+            },
+            "probability_threshold": 0.59
+        }
+    },
+    "multi": {},
+    "regression": {}
+}

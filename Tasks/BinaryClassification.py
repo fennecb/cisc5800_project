@@ -19,6 +19,7 @@ from xgboost import XGBClassifier
 
 from BaseStudentPerformance import BaseStudentPerformance
 from Enums.ParamGrids import ParamGrids
+from VisualizationUtils import *
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -1209,3 +1210,87 @@ class BinaryClassification(BaseStudentPerformance):
         }
         
         return optimal_threshold, achieved_recall, threshold_results
+
+    # def generate_single_model_visualizations(self, output_dir=None):
+    #     """
+    #     Generate all visualizations needed for the Single Models subsection.
+        
+    #     Parameters:
+    #     -----------
+    #     output_dir : str, optional
+    #         Directory to save the generated figures. If None, uses the current directory.
+        
+    #     Returns:
+    #     --------
+    #     dict
+    #         Dictionary containing paths to all generated figures
+    #     """
+    #     import os
+    #     import numpy as np
+        
+    #     if output_dir is None:
+    #         output_dir = os.getcwd()
+    #     os.makedirs(output_dir, exist_ok=True)
+        
+    #     figure_paths = {}
+        
+    #     # 1. Model Comparison Chart
+    #     if hasattr(self, 'models_evaluation'):
+    #         models_results = self.models_evaluation
+    #     else:
+    #         # If you haven't already evaluated multiple models, create example data
+    #         models_results = {
+    #             'Random Forest': self.evaluation_results,
+    #             # Add other models here if available
+    #         }
+        
+    #     chart_path = os.path.join(output_dir, 'model_comparison_chart.png')
+    #     plot_model_comparison(models_results, output_path=chart_path)
+    #     figure_paths['model_comparison'] = chart_path
+        
+    #     # 2. Precision-Recall Curves
+    #     y_test = self.evaluation_results['y_test']
+        
+    #     if hasattr(self, 'models_probabilities'):
+    #         models_proba = self.models_probabilities
+    #     else:
+    #         # If you haven't stored probabilities for multiple models
+    #         models_proba = {
+    #             'Random Forest': self.evaluation_results['prediction_probabilities'][:, 1]
+    #             # Add other models here if available
+    #         }
+        
+    #     pr_path = os.path.join(output_dir, 'precision_recall_curves.png')
+    #     plot_precision_recall_curves(models_proba, y_test, output_path=pr_path)
+    #     figure_paths['precision_recall'] = pr_path
+        
+    #     # 3. Feature Importance
+    #     feature_names = self.get_feature_names_after_preprocessing()
+    #     best_model = self.grid_search_results['best_model'].named_steps['classifier']
+        
+    #     fi_path = os.path.join(output_dir, 'feature_importance.png')
+    #     plot_feature_importance(best_model, feature_names, output_path=fi_path)
+    #     figure_paths['feature_importance'] = fi_path
+        
+    #     # 4. Probability Distribution
+    #     y_prob = self.evaluation_results['prediction_probabilities'][:, 1]
+        
+    #     # If you've already found an optimal threshold
+    #     optimal_threshold = None
+    #     if hasattr(self, 'custom_threshold_results'):
+    #         optimal_threshold = self.custom_threshold_results['threshold']
+        
+    #     pd_path = os.path.join(output_dir, 'probability_distribution.png')
+    #     plot_probability_distribution(y_prob, y_test, optimal_threshold=optimal_threshold, 
+    #                                 output_path=pd_path)
+    #     figure_paths['probability_distribution'] = pd_path
+        
+    #     # 5. Threshold Analysis
+    #     ta_path = os.path.join(output_dir, 'threshold_analysis.png')
+    #     _, opt_threshold = plot_threshold_analysis(y_prob, y_test, output_path=ta_path)
+    #     figure_paths['threshold_analysis'] = ta_path
+        
+    #     print(f"All visualizations saved to {output_dir}")
+    #     print(f"Optimal threshold for F1 score: {opt_threshold:.3f}")
+        
+    #     return figure_paths

@@ -1,0 +1,23 @@
+{
+    "accuracy": 0.6046511627906976,
+    "balanced_accuracy": 0.7168664668664668,
+    "f1_score": 0.6580566342336053,
+    "minority_class_precision": 0.2636363636363636,
+    "minority_class_recall": 0.8787878787878788,
+    "minority_class_f1": 0.40559440559440557,
+    "roc_auc": 0.7576590076590076,
+    "average_precision": 0.9338906536909621,
+    "best_params": {
+        "classifier__C": 0.01,
+        "classifier__class_weight": "balanced",
+        "classifier__max_iter": 2500,
+        "classifier__penalty": "l1",
+        "classifier__solver": "liblinear",
+        "smote__k_neighbors": 7
+    },
+    "class_distribution": {
+        "1": 549,
+        "0": 100
+    },
+    "probability_threshold": 0.59
+}

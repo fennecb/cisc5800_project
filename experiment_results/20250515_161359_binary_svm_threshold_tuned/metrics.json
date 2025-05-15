@@ -1,0 +1,21 @@
+{
+    "accuracy": 0.5395348837209303,
+    "balanced_accuracy": 0.6784049284049284,
+    "f1_score": 0.5962375944304547,
+    "minority_class_precision": 0.23387096774193547,
+    "minority_class_recall": 0.8787878787878788,
+    "minority_class_f1": 0.36942675159235666,
+    "roc_auc": 0.7157842157842158,
+    "average_precision": 0.9228102906743822,
+    "best_params": {
+        "classifier__C": 0.1,
+        "classifier__gamma": "scale",
+        "classifier__kernel": "sigmoid",
+        "smote__k_neighbors": 7
+    },
+    "class_distribution": {
+        "1": 549,
+        "0": 100
+    },
+    "probability_threshold": 0.77
+}

@@ -20,35 +20,19 @@ class ParamGrids(Enum):
     }
     
     SVM_BINARY = {
-        'classifier__C': [0.1, 1, 10, 100],
-        'classifier__kernel': ['rbf', 'linear', 'poly', 'sigmoid'],
+        'classifier__C': [0.1, 1, 10],
+        'classifier__kernel': ['rbf', 'linear', 'sigmoid'],
         'classifier__gamma': ['scale', 'auto', 0.01, 0.1, 1],
-        'classifier__class_weight': ['balanced', None],
-        'classifier__degree': [2, 3, 4],  # Only used when kernel='poly'
         'smote__k_neighbors': [3, 5, 7]
     }
     
     GRADIENT_BOOSTING_BINARY = {
-        'classifier__n_estimators': [50, 100, 200],
-        'classifier__learning_rate': [0.01, 0.05, 0.1, 0.2],
-        'classifier__max_depth': [3, 5, 7],
-        'classifier__min_samples_split': [2, 5, 10],
+        'classifier__n_estimators': [100, 200],
+        'classifier__learning_rate': [0.05, 0.1, 0.2],
+        'classifier__max_depth': [5, 7],
+        'classifier__min_samples_split': [5, 10],
         'classifier__min_samples_leaf': [1, 2, 4],
         'classifier__subsample': [0.8, 0.9, 1.0],
-        'smote__k_neighbors': [3, 5, 7]
-    }
-    
-    EXTRA_TREES_BINARY = {
-        'classifier__n_estimators': [50, 100, 200],
-        'classifier__max_depth': [3, 5, 7, None],
-        'classifier__min_samples_split': [2, 5, 10],
-        'classifier__min_samples_leaf': [1, 2, 4],
-        'classifier__class_weight': ['balanced', 'balanced_subsample', None],
-        'smote__k_neighbors': [3, 5, 7]
-    }
-    
-    NAIVE_BAYES_BINARY = {
-        'classifier__fit_prior': [True, False],
         'smote__k_neighbors': [3, 5, 7]
     }
     
@@ -57,13 +41,6 @@ class ParamGrids(Enum):
         'classifier__weights': ['uniform', 'distance'],
         'classifier__algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute'],
         'classifier__p': [1, 2],  # 1 for manhattan_distance, 2 for euclidean_distance
-        'smote__k_neighbors': [3, 5, 7]
-    }
-    
-    ADA_BOOST_BINARY = {
-        'classifier__n_estimators': [50, 100, 200],
-        'classifier__learning_rate': [0.01, 0.1, 0.5, 1.0],
-        'classifier__algorithm': ['SAMME', 'SAMME.R'],
         'smote__k_neighbors': [3, 5, 7]
     }
 
@@ -113,30 +90,11 @@ class ParamGrids(Enum):
         'classifier__subsample': [0.8, 0.9, 1.0]
     }
     
-    EXTRA_TREES_MULTICLASS = {
-        'classifier__n_estimators': [50, 100, 200],
-        'classifier__max_depth': [3, 5, 7, None],
-        'classifier__min_samples_split': [2, 5, 10],
-        'classifier__min_samples_leaf': [1, 2, 4],
-        'classifier__class_weight': ['balanced', 'balanced_subsample', None]
-    }
-    
-    NAIVE_BAYES_MULTICLASS = {
-        'classifier__alpha': [0.1, 0.5, 1.0, 2.0],
-        'classifier__fit_prior': [True, False]
-    }
-    
     KNN_MULTICLASS = {
         'classifier__n_neighbors': [3, 5, 7, 9, 11],
         'classifier__weights': ['uniform', 'distance'],
         'classifier__algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute'],
         'classifier__p': [1, 2]
-    }
-    
-    ADA_BOOST_MULTICLASS = {
-        'classifier__n_estimators': [50, 100, 200],
-        'classifier__learning_rate': [0.01, 0.1, 0.5, 1.0],
-        'classifier__algorithm': ['SAMME', 'SAMME.R']
     }
     
     # ==================== REGRESSION GRIDS ====================
@@ -150,7 +108,7 @@ class ParamGrids(Enum):
     
     LINEAR_REGRESSION_REGRESSION = {
         'regressor__fit_intercept': [True, False],
-        'regressor__positive': [True, False]  # For sklearn version >= 0.24
+        'regressor__positive': [True, False]
     }
     
     RIDGE_REGRESSION = {
@@ -166,20 +124,11 @@ class ParamGrids(Enum):
         'regressor__selection': ['cyclic', 'random']
     }
     
-    ELASTICNET_REGRESSION = {
-        'regressor__alpha': [0.001, 0.01, 0.1, 1.0, 10.0],
-        'regressor__l1_ratio': [0.1, 0.3, 0.5, 0.7, 0.9],
-        'regressor__fit_intercept': [True, False],
-        'regressor__max_iter': [1000, 5000, 10000],
-        'regressor__selection': ['cyclic', 'random']
-    }
-    
     SVR_REGRESSION = {
         'regressor__C': [0.1, 1, 10, 100],
-        'regressor__kernel': ['rbf', 'linear', 'poly', 'sigmoid'],
+        'regressor__kernel': ['rbf', 'linear','sigmoid'],
         'regressor__gamma': ['scale', 'auto', 0.01, 0.1, 1],
         'regressor__epsilon': [0.01, 0.1, 0.2, 0.5],
-        'regressor__degree': [2, 3, 4]  # Only used when kernel='poly'
     }
     
     GRADIENT_BOOSTING_REGRESSION = {
@@ -192,14 +141,6 @@ class ParamGrids(Enum):
         'regressor__subsample': [0.8, 0.9, 1.0]
     }
     
-    EXTRA_TREES_REGRESSION = {
-        'regressor__n_estimators': [50, 100, 200],
-        'regressor__max_depth': [3, 5, 7, None],
-        'regressor__min_samples_split': [2, 5, 10],
-        'regressor__min_samples_leaf': [1, 2, 4],
-        'regressor__max_features': ['sqrt', 'log2', None]
-    }
-    
     KNN_REGRESSION = {
         'regressor__n_neighbors': [3, 5, 7, 9, 11],
         'regressor__weights': ['uniform', 'distance'],
@@ -207,23 +148,10 @@ class ParamGrids(Enum):
         'regressor__p': [1, 2]
     }
     
-    ADA_BOOST_REGRESSION = {
-        'regressor__n_estimators': [50, 100, 200],
-        'regressor__learning_rate': [0.01, 0.05, 0.1, 0.5, 1.0],
-        'regressor__loss': ['linear', 'square', 'exponential']
-    }
-    
     BAYESIAN_RIDGE_REGRESSION = {
         'regressor__alpha_1': [1e-06, 1e-05, 1e-04],
         'regressor__alpha_2': [1e-06, 1e-05, 1e-04],
         'regressor__lambda_1': [1e-06, 1e-05, 1e-04],
         'regressor__lambda_2': [1e-06, 1e-05, 1e-04],
-        'regressor__fit_intercept': [True, False]
-    }
-    
-    HUBER_REGRESSION = {
-        'regressor__epsilon': [1.1, 1.35, 1.5, 2.0],
-        'regressor__max_iter': [100, 300, 500],
-        'regressor__alpha': [0.0001, 0.001, 0.01],
         'regressor__fit_intercept': [True, False]
     }

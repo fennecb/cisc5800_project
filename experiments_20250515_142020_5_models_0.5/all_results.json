@@ -1,0 +1,113 @@
+{
+    "binary": {
+        "svm": {
+            "accuracy": 0.6651162790697674,
+            "balanced_accuracy": 0.640942390942391,
+            "f1_score": 0.7096658935623394,
+            "minority_class_precision": 0.25316455696202533,
+            "minority_class_recall": 0.6060606060606061,
+            "minority_class_f1": 0.35714285714285715,
+            "roc_auc": 0.7157842157842158,
+            "average_precision": 0.9228102906743822,
+            "best_params": {
+                "classifier__C": 0.1,
+                "classifier__gamma": "scale",
+                "classifier__kernel": "sigmoid",
+                "smote__k_neighbors": 7
+            },
+            "class_distribution": {
+                "1": 549,
+                "0": 100
+            }
+        },
+        "knn": {
+            "accuracy": 0.6186046511627907,
+            "balanced_accuracy": 0.6134698634698634,
+            "f1_score": 0.6714657054725678,
+            "minority_class_precision": 0.2247191011235955,
+            "minority_class_recall": 0.6060606060606061,
+            "minority_class_f1": 0.32786885245901637,
+            "roc_auc": 0.6705794205794207,
+            "average_precision": 0.9060712038555707,
+            "best_params": {
+                "classifier__algorithm": "auto",
+                "classifier__n_neighbors": 11,
+                "classifier__p": 2,
+                "classifier__weights": "uniform",
+                "smote__k_neighbors": 5
+            },
+            "class_distribution": {
+                "1": 549,
+                "0": 100
+            }
+        },
+        "gradient_boosting": {
+            "accuracy": 0.8,
+            "balanced_accuracy": 0.6213786213786214,
+            "f1_score": 0.801217055219769,
+            "minority_class_precision": 0.35294117647058826,
+            "minority_class_recall": 0.36363636363636365,
+            "minority_class_f1": 0.3582089552238806,
+            "roc_auc": 0.7607392607392607,
+            "average_precision": 0.9447465926548311,
+            "best_params": {
+                "classifier__learning_rate": 0.2,
+                "classifier__max_depth": 7,
+                "classifier__min_samples_leaf": 1,
+                "classifier__min_samples_split": 5,
+                "classifier__n_estimators": 100,
+                "classifier__subsample": 1.0,
+                "smote__k_neighbors": 7
+            },
+            "class_distribution": {
+                "1": 549,
+                "0": 100
+            }
+        },
+        "random_forest": {
+            "accuracy": 0.8046511627906977,
+            "balanced_accuracy": 0.6985514485514486,
+            "f1_score": 0.8163481866970239,
+            "minority_class_precision": 0.4,
+            "minority_class_recall": 0.5454545454545454,
+            "minority_class_f1": 0.46153846153846156,
+            "roc_auc": 0.7730602730602731,
+            "average_precision": 0.9462319916534808,
+            "best_params": {
+                "classifier__class_weight": "balanced",
+                "classifier__max_depth": 3,
+                "classifier__min_samples_split": 2,
+                "classifier__n_estimators": 100,
+                "smote__k_neighbors": 7
+            },
+            "class_distribution": {
+                "1": 549,
+                "0": 100
+            }
+        },
+        "logistic_regression": {
+            "accuracy": 0.627906976744186,
+            "balanced_accuracy": 0.7181984681984682,
+            "f1_score": 0.6793694221874796,
+            "minority_class_precision": 0.27184466019417475,
+            "minority_class_recall": 0.8484848484848485,
+            "minority_class_f1": 0.4117647058823529,
+            "roc_auc": 0.7576590076590076,
+            "average_precision": 0.9338906536909621,
+            "best_params": {
+                "classifier__C": 0.01,
+                "classifier__class_weight": "balanced",
+                "classifier__max_iter": 2500,
+                "classifier__penalty": "l1",
+                "classifier__solver": "liblinear",
+                "smote__k_neighbors": 7
+            },
+            "class_distribution": {
+                "1": 549,
+                "0": 100
+            }
+        }
+    },
+    "multi": {},
+    "regression": {}
+}

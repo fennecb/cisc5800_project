@@ -1,0 +1,23 @@
+{
+    "accuracy": 0.8,
+    "balanced_accuracy": 0.6213786213786214,
+    "f1_score": 0.801217055219769,
+    "minority_class_precision": 0.35294117647058826,
+    "minority_class_recall": 0.36363636363636365,
+    "minority_class_f1": 0.3582089552238806,
+    "roc_auc": 0.7607392607392607,
+    "average_precision": 0.9447465926548311,
+    "best_params": {
+        "classifier__learning_rate": 0.2,
+        "classifier__max_depth": 7,
+        "classifier__min_samples_leaf": 1,
+        "classifier__min_samples_split": 5,
+        "classifier__n_estimators": 100,
+        "classifier__subsample": 1.0,
+        "smote__k_neighbors": 7
+    },
+    "class_distribution": {
+        "1": 549,
+        "0": 100
+    }
+}
