@@ -1,0 +1,24 @@
+
+============================== EXPERIMENT CONFIGURATION ==============================
+model_type: binary
+algorithm: logistic_regression
+threshold: 10.0
+prediction_threshold: 0.44
+target_precision: None
+detailed_binary_analysis: False
+n_bins: 5
+strategy: quantile
+target: G3
+test_size: 0.33
+cv: 5
+n_jobs: 1
+random_state: 42
+imbalance_method: smote
+ensemble_models: ['random_forest', 'logistic_regression', 'xgboost']
+ensemble_voting: single
+ensemble_threshold: 0.4
+save_results: True
+target_negative_accuracy: None
+target_negative_recall: None
+================================================================================
+

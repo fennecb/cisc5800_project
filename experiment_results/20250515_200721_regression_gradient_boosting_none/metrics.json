@@ -1,0 +1,16 @@
+{
+    "r2": 0.2685610504830406,
+    "rmse": 2.7762739695488925,
+    "mae": 2.021032373572951,
+    "mape": 1027569496982463.1,
+    "explained_variance": 0.27120268519213264,
+    "best_params": {
+        "regressor__learning_rate": 0.05,
+        "regressor__loss": "absolute_error",
+        "regressor__max_depth": 5,
+        "regressor__min_samples_leaf": 1,
+        "regressor__min_samples_split": 5,
+        "regressor__n_estimators": 100,
+        "regressor__subsample": 0.9
+    }
+}

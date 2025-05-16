@@ -1,0 +1,14 @@
+{
+    "r2": 0.2682141322895848,
+    "rmse": 2.776932278608406,
+    "mae": 2.017065307560656,
+    "mape": 984175084482609.6,
+    "explained_variance": 0.2712529361324675,
+    "best_params": {
+        "regressor__max_depth": null,
+        "regressor__max_features": "sqrt",
+        "regressor__min_samples_leaf": 1,
+        "regressor__min_samples_split": 5,
+        "regressor__n_estimators": 100
+    }
+}

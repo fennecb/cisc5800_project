@@ -1,0 +1,56 @@
+{
+    "binary": {},
+    "multi": {},
+    "regression": {
+        "random_forest": {
+            "r2": 0.2682141322895848,
+            "rmse": 2.776932278608406,
+            "mae": 2.017065307560656,
+            "mape": 984175084482609.6,
+            "explained_variance": 0.2712529361324675,
+            "best_params": {
+                "regressor__max_depth": null,
+                "regressor__max_features": "sqrt",
+                "regressor__min_samples_leaf": 1,
+                "regressor__min_samples_split": 5,
+                "regressor__n_estimators": 100
+            }
+        },
+        "linear_regression": {
+            "r2": 0.21962774281599384,
+            "rmse": 2.867637099703319,
+            "mae": 2.1638194787734824,
+            "mape": 952464226556150.4,
+            "explained_variance": 0.22008284930054223,
+            "best_params": {
+                "regressor__fit_intercept": true,
+                "regressor__positive": false
+            }
+        },
+        "ridge": {
+            "r2": 0.2691109109062483,
+            "rmse": 2.775230239113274,
+            "mae": 2.024270813287095,
+            "mape": 1016684430952748.6,
+            "explained_variance": 0.2695652047577156,
+            "best_params": {
+                "regressor__alpha": 100.0,
+                "regressor__fit_intercept": true,
+                "regressor__solver": "sag"
+            }
+        },
+        "lasso": {
+            "r2": 0.2580815455560289,
+            "rmse": 2.7960914181043237,
+            "mae": 2.057314575591031,
+            "mape": 1006034363559284.4,
+            "explained_variance": 0.25936097280886383,
+            "best_params": {
+                "regressor__alpha": 0.1,
+                "regressor__fit_intercept": true,
+                "regressor__max_iter": 1000,
+                "regressor__selection": "cyclic"
+            }
+        }
+    }
+}

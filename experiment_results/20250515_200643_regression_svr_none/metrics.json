@@ -1,0 +1,13 @@
+{
+    "r2": 0.29122996414869706,
+    "rmse": 2.7329139286766986,
+    "mae": 2.007868633231909,
+    "mape": 1014623830701281.0,
+    "explained_variance": 0.2912473845755923,
+    "best_params": {
+        "regressor__C": 10,
+        "regressor__epsilon": 0.5,
+        "regressor__gamma": 0.01,
+        "regressor__kernel": "rbf"
+    }
+}

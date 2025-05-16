@@ -1,0 +1,13 @@
+{
+    "r2": 0.2580815455560289,
+    "rmse": 2.7960914181043237,
+    "mae": 2.057314575591031,
+    "mape": 1006034363559284.4,
+    "explained_variance": 0.25936097280886383,
+    "best_params": {
+        "regressor__alpha": 0.1,
+        "regressor__fit_intercept": true,
+        "regressor__max_iter": 1000,
+        "regressor__selection": "cyclic"
+    }
+}
